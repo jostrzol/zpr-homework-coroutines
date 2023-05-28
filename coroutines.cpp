@@ -16,7 +16,7 @@
 // na obecność garbage collectora oraz prostsze paradygmaty języków. W C++ nie
 // ma takiego mechanizmu i trzeba zadbać o poprawne czyszczenie wcześniej
 // wspomnianego obiektu na stercie (co jednak może zostać zautomatyzowane za
-// pomocą wzorca RAII).
+// pomocą wzorca RAII - przykład p3).
 //
 // Coroutines C++20 nie są trywialne w użyciu. Aby zdefiniować coroutine należy
 // zdefiniować funkcję spełniającą 2 nadrzędne warunki:
@@ -34,15 +34,19 @@ struct promise;
 // Powinna (choć formalnie nie musi) agregować lub dziedziczyć po
 // std::coroutine_handle<promise>, aby można było z kodu wywołującego tę
 // coroutine wznowić jej wykonywanie za pomocą
-// std::coroutine_handle<...>::operator().
+// std::coroutine_handle<...>::operator() oraz zniszczyć za pomocą
+// std::coroutine_handle<...>::destroy().
 struct coroutine : std::coroutine_handle<promise> {
+
   // Musi posiadać podklasę promise_type.
   using promise_type = p1::promise;
 };
 
 // "Obietnica" - obiekt tworzony przy starcie coroutine. W głównej mierze
-// decyduje on o zachowaniu coroutine w różnych przypadkach.
+// decyduje on o zachowaniu coroutine w różnych przypadkach oraz może
+// przechowywać wartości zwracane przez coroutine (przykłady p2, p3).
 struct promise {
+
   // Wymagana funkcja zamiany obietnicy na coroutine. Na początku życia
   // coroutine tworzy obiekt promise, który następnie musi zostać zamieniony w
   // obiekt coroutine w celu przekazania do kodu wołającego. Do tego właśnie
@@ -52,39 +56,38 @@ struct promise {
     // Metoda std::coroutine_handle<...>::from_promise() korzysta z tego, że w
     // obiekcie stanu coroutine na stosie jest stałe przesunięcie między
     // obiektem promise a coroutine_handle (oba są tworzone przy wejściu do
-    // coroutine -> zobacz komentarze do f.counter() niżej)
+    // coroutine -> zobacz komentarze do funkcji counter() niżej)
     return {coroutine::from_promise(*this)};
   }
 
   // Definiuje zachowanie coroutine zaraz po stworzeniu. W zależności od klasy
   // wartości zwracanej:
   // * std::suspend_always => zawiesimy coroutine zaraz po stworzeniu (działanie
-  // 'leniwe'),
+  //   'leniwe'),
   // * std::suspend_never => będziemy wykonywać kod coroutine aż do następnego
-  // zawieszenia
-  //   (działanie 'gorliwe').
+  //   zawieszenia (działanie 'gorliwe').
   //
   // std::suspend_always i std::suspend_never to specjalne klasy tzw.
   // 'awaiterów' (lub 'awaitable'), czyli klas, instancji których możemy użyć w
   // wyrażeniu po operatorze co_await. Można tworzyć własne klasy 'awaiterów' w
-  // celu optymalizacji kodu lub specjalnego zachowania, jednak nie jest to
-  // rozwinięte w moich przykładach.
+  // celu optymalizacji kodu lub specjalnego zachowania (zatrzymywanie funkcji i
+  // zapisywanie jej stanu na stosie może być zbyt kosztowne aby wykonywać je
+  // tak często), jednak nie jest to rozwinięte w dalszych przykładach.
   std::suspend_always initial_suspend() noexcept { return {}; }
 
   // Definiuje zachowanie coroutine zaraz po zakończeniu działania, czyli w
-  // jednej z sytuacji: 1) wywołanie co_return `expr` - kończymy działanie i
-  // zwracamy wartość, 2) wywołanie co_return - kończymy działanie i nie
-  // zwracamy wartość, 3) 'wypadnięcie poza funkcję' - kończymy działanie i nie
-  // zwracamy wartości.
+  // jednej z sytuacji:
+  // 1) wywołanie co_return `expr` - kończymy działanie i zwracamy wartość,
+  // 2) wywołanie co_return - kończymy działanie i nie zwracamy wartość,
+  // 3) 'wypadnięcie poza funkcję' - kończymy działanie i nie zwracamy wartości.
   //
   // W zależności od klasy zwracanej:
   // * std::suspend_always => zawiesimy coroutine zaraz po zakończeniu
-  // działania. Oznacza to, że
-  //   obiekt reprezentujący stan coroutine na stercie zostanie w całości i
-  //   będzie można z niego jeszcze odczytać wartości, natomiast trzeba będzie
-  //   usunąć obiekt ze sterty później.
+  //   działania. Oznacza to, że obiekt reprezentujący stan coroutine na stercie
+  //   zostanie w całości i będzie można z niego jeszcze odczytać wartości,
+  //   natomiast trzeba będzie usunąć obiekt ze sterty później.
   // * std::suspend_never => zaraz po zakończeniu działania usuniemy obiekt ze
-  // sterty.
+  //   sterty.
   //
   // W przypadku 1) zostanie wywołana dodatkowo metoda
   // promise::return_value(...), a w przypadkach 2) i 3) metoda
@@ -94,6 +97,7 @@ struct promise {
   // funkcji promise::return_* program się nie skompiluje, natomiast w przypadku
   // 3) będzie to niezdefiniowane zachowanie!
   std::suspend_always final_suspend() noexcept { return {}; }
+
   // Zobacz -> opis promise::final_suspend() wyżej.
   //
   // Może być zdefiniowana tylko jedna metoda z promise::return_void() lub
@@ -102,7 +106,7 @@ struct promise {
   // void return_value(...) {}
 
   // Funkcja wywoływana w przypadku wystąpienia wyjątku w coroutine. Funkcja
-  // powinna wydostać wyjątek za pomocą std::current_exception() i zapisać ją w
+  // powinna wydostać wyjątek za pomocą std::current_exception() i zapisać go w
   // promise. W tym przykładzie jest to pominięte, przez co wszelkie wyjątki
   // wewnątrz coroutine zostaną cicho zignorowane.
   void unhandled_exception() {}
@@ -150,11 +154,11 @@ struct coroutine : std::coroutine_handle<promise> {
 
 struct promise {
   // Dodajemy wartość do klasy promise, którą coroutine może zapisywać przy
-  // wywołaniu co_yield `expr`.
+  // wywołaniu `co_yield expr`.
   std::size_t value_;
 
   // Dodajemy wartość do klasy promise, którą coroutine może zapisywać przy
-  // wywołaniu co_return `expr`.
+  // wywołaniu `co_return expr`.
   std::string ret_;
 
   coroutine get_return_object() { return {coroutine::from_promise(*this)}; }
@@ -168,11 +172,11 @@ struct promise {
   // ret przy zakończeniu coroutine.
   void return_value(std::string &&value) { ret_ = value; }
 
-  // Ta funkcja będzie wołana przy wywołaniu operatora co_yield `expr`.
+  // Ta funkcja będzie wołana przy wywołaniu operatora `co_yield expr`.
   //
   // Tutaj zapisujemy przekazaną wartość w polu value_, a następnie zwracamy
   // obiekt std::suspend_always, dzięki czemu coroutine się zawiesi każdorazowo
-  // po wywołaniu co_yield `expr`. Oczywiście możemy zwracać własny 'awaiter' w
+  // po wywołaniu `co_yield expr`. Oczywiście możemy zwracać własny 'awaiter' w
   // celu optymalizacji (być może coroutine wcale nie musi się od razu zawiesić,
   // a policzyć przyszłe wartości, co oszczędziłoby każdorazowego, kosztownego
   // zapisywania stanu funkcji do sterty).
@@ -187,8 +191,9 @@ struct promise {
 // funkcja wywołująca.
 coroutine counter(std::size_t max) {
   for (std::size_t i = 0; i < max; i++) {
-    // co_yield `expr` może być koncepcyjnie zamienione na: co_await
-    // promise.yield_value(`expr`)
+    //   `co_yield expr`
+    // może być koncepcyjnie zamienione na:
+    //   `co_await promise.yield_value(expr)`
     std::cout << "coroutine: generated: " << i << std::endl;
     co_yield i;
   }
@@ -204,9 +209,10 @@ auto main() -> void {
   //
   // UWAGA: niepoprawne byłoby użycie domyślnej konwersji obiekty
   // std::coroutine_handle<...> na bool (operator bool) - sprawdza on jednie czy
-  // coroutine_handle jest zainicjowany a nie czy coroutine dalej żyje.
+  // coroutine_handle jest zainicjowany a nie, czy coroutine dalej się nie
+  // zakończyła.
   while (!h.done()) {
-    // Zamieniliśmy kolejność, najpierw wypisujemy, potem wznawiamy coroutine.
+    // Zamieniliśmy kolejność - najpierw wypisujemy, potem wznawiamy coroutine.
     // Możemy tak zrobić, ponieważ teraz promise::initial_suspend zwraca
     // std::suspend_never i wartość jest wyliczona przy tworzeniu coroutine.
     std::cout << "main: got from coroutine: " << p.value_ << std::endl;
@@ -228,6 +234,9 @@ namespace p3 {
 // Aby ułatwić sobie życie możemy stworzyć generyczny szablon wyżej omawianej
 // klasy coroutine jej wewnętrznej klasy promise_type. Szablon będzie dbał
 // również o zwolnienie pamięci w destruktorze.
+//
+// Poniższy szablon został wzorowany na przykładzie z dokumentacji:
+// https://en.cppreference.com/w/cpp/language/coroutines#co_yield
 template <typename T> struct Generator {
   struct promise_type;
   using handle_type = std::coroutine_handle<promise_type>;
@@ -255,17 +264,19 @@ template <typename T> struct Generator {
     void return_void() {}
   };
 
-  // Tym razem zamiast dziedziczyć po std::coroutine_handle<...> agregujemy go.
+  // Tym razem zamiast dziedziczyć po std::coroutine_handle<...> - agregujemy
+  // go.
   handle_type h_;
 
   Generator(handle_type h) : h_(h) {}
   // Zwalniamy pamięć zaalokowaną na stercie
   ~Generator() { h_.destroy(); }
 
-  // Tutaj operator bool sprawdza czy coroutine zakończyła działanie.
+  // Tutaj Generator<...>::operator bool sprawdza czy coroutine zakończyła
+  // działanie.
   //
   // Aby to sprawdzić musimy najpierw wznowić coroutine (za pomocą
-  // Generator<...>::fill()). Jeżeli coroutine wywołała co_yield, to wynik
+  // Generator<...>::fill()). Jeżeli coroutine wywołała `co_yield`, to wynik
   // zostanie zapamiętany w promise_type::value_, a h_.done() == false. W
   // przeciwnym wypadku pole promise_type::value_ pozostanie niezmienione, a
   // h_.done() == true.
@@ -274,9 +285,9 @@ template <typename T> struct Generator {
     return !h_.done();
   }
 
-  // operator() przenosi ostatnio zapisaną wartość w promise_type::value_.
-  // Jeżeli wartość była 'przeterminowana' (full_ == false), to również
-  // wznawiamy coroutine i pobieramy nową wartość.
+  // Generator<...>::operator() przenosi ostatnio zapisaną wartość w
+  // promise_type::value_. Jeżeli wartość była 'przeterminowana' (full_ ==
+  // false), to również wznawiamy coroutine i pobieramy nową wartość.
   T operator()() {
     fill();
     full_ = false;
@@ -323,15 +334,17 @@ Generator<size_t> counter_faulty(std::size_t max) {
 }
 
 auto main() -> void {
+  std::cout << "main: starting counter()" << std::endl;
   auto gen = counter(3);
   while (gen) {
     std::cout << "main: got from coroutine: " << gen() << std::endl;
   }
 
+  std::cout << "main: starting counter_faulty()" << std::endl;
   auto gen2 = counter_faulty(3);
   // UWAGA: Pętla powinna być wewnątrz bloku try, ponieważ
   // Generator<...>::operator bool może wznawiać coroutine, co jest
-  // niezdefiniowanym zachowaniem.
+  // niezdefiniowanym zachowaniem jeżeli wystąpił wyjątek.
   try {
     while (gen2) {
       std::cout << "main: got from coroutine: " << gen2() << std::endl;
