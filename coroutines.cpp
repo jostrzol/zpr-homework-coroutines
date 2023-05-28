@@ -52,7 +52,7 @@ struct promise {
     // Metoda std::coroutine_handle<...>::from_promise() korzysta z tego, że w
     // obiekcie stanu coroutine na stosie jest stałe przesunięcie między
     // obiektem promise a coroutine_handle (oba są tworzone przy wejściu do
-    // coroutine -> zobacz komentarze do f. counter() niżej)
+    // coroutine -> zobacz komentarze do f.counter() niżej)
     return {coroutine::from_promise(*this)};
   }
 
@@ -171,8 +171,8 @@ struct promise {
   // Ta funkcja będzie wołana przy wywołaniu operatora co_yield `expr`.
   //
   // Tutaj zapisujemy przekazaną wartość w polu value_, a następnie zwracamy
-  // obiekt std::suspend_always, dzięki czemu coroutine się zawiesi każdorazaowo
-  // po wywpołaniu co_yield `expr`. Oczywiście możemy zwracać własny 'awaiter' w
+  // obiekt std::suspend_always, dzięki czemu coroutine się zawiesi każdorazowo
+  // po wywołaniu co_yield `expr`. Oczywiście możemy zwracać własny 'awaiter' w
   // celu optymalizacji (być może coroutine wcale nie musi się od razu zawiesić,
   // a policzyć przyszłe wartości, co oszczędziłoby każdorazowego, kosztownego
   // zapisywania stanu funkcji do sterty).
@@ -215,7 +215,7 @@ auto main() -> void {
 
   // Tutaj coroutine musiała zakończyć działanie, bo h.done() == true. Zatem
   // możemy przeczytać wartość zwróconą.
-  std::cout << "main: coroutine endend: " << p.ret_ << std::endl;
+  std::cout << "main: coroutine ended: " << p.ret_ << std::endl;
 
   h.destroy();
   return;
