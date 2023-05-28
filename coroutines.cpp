@@ -313,10 +313,31 @@ Generator<size_t> counter(std::size_t max) {
   }
 }
 
+Generator<size_t> counter_faulty(std::size_t max) {
+  for (std::size_t i = 0; i < max; i++) {
+    std::cout << "coroutine: generated: " << i << std::endl;
+    co_yield i;
+  }
+  std::cout << "coroutine: throwing exception" << std::endl;
+  throw std::logic_error("coroutine failed");
+}
+
 auto main() -> void {
   auto gen = counter(3);
   while (gen) {
     std::cout << "main: got from coroutine: " << gen() << std::endl;
+  }
+
+  auto gen2 = counter_faulty(3);
+  // UWAGA: Pętla powinna być wewnątrz bloku try, ponieważ
+  // Generator<...>::operator bool może wznawiać coroutine, co jest
+  // niezdefiniowanym zachowaniem.
+  try {
+    while (gen2) {
+      std::cout << "main: got from coroutine: " << gen2() << std::endl;
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "main: exception: " << e.what() << std::endl;
   }
 
   // Nie musimy niszczyć obiektu stanu coroutine, bo zostanie on zniszczony
@@ -335,5 +356,6 @@ auto main() -> int {
   return 0;
 }
 
+// Bibliografia:
 // https://en.cppreference.com/w/cpp/language/coroutines
 // https://www.scs.stanford.edu/~dm/blog/c++-coroutines.html
