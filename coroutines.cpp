@@ -3,8 +3,6 @@
 // kompilacja:  g++ -fcoroutines -std=c++20 coroutines.cpp
 
 #include <coroutine>
-#include <cstdint>
-#include <exception>
 #include <iostream>
 
 // Coroutine to koncepcja znana z innych języków, takich jak JavaScript, Kotlin,
